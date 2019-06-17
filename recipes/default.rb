@@ -164,65 +164,54 @@ end
 
 python_versions = node['kagent']['python_conda_versions'].split(',').map(&:strip)
 
+customTf=0
+if node['tensorflow']['custom_url'].start_with?("http://", "https://", "file://")
+  begin
+    uri = URI.parse(node['tensorflow']['custom_url'])
+    %w( http https ).include?(uri.scheme)
+    customTf=1
+  rescue URI::BadURIError
+    Chef::Log.warn "BadURIError custom_url for tensorflow: #{node['tensorflow']['custom_url']}"
+    customTf=0
+  rescue URI::InvalidURIError
+    Chef::Log.warn "InvalidURIError custom_url for tensorflow: #{node['tensorflow']['custom_url']}"
+    customTf=0
+  end
+end
+
+template "#{node['conda']['base_dir']}/base-env.sh" do
+  source 'base_env.sh.erb'
+  owner node['conda']['user']
+  group node['conda']['group']
+  mode '0755'
+  action :create
+end
+
+## Install GNU parallel for parallel execution
+package "parallel"
+
+py_versions = python_versions.map{ |p| p.gsub(".", "")} 
+env_names = py_versions.map { |p| "python" + p }
+
+bash "create_base_envs" do
+  user node['conda']['user']
+  group node['conda']['group']
+  umask "022"
+  environment ({ 
+    'HOME' => ::Dir.home(node['conda']['user']), 
+    'USER' => node['conda']['user'],
+    'CONDA_DIR' => node['conda']['base_dir'],
+    'MPI' => node['tensorflow']['need_mpi'],
+    'HADOOP_HOME' => node['hops']['base_dir'],
+    'JAVA_HOME' => node['java']['java_home'],
+    'CUSTOM_TF' => customTf
+   })
+  code <<-EOF
+    parallel --link #{node['conda']['base_dir']}/base-env.sh ::: #{env_names.join(" ")} ::: #{py_verisons.join(" ")}
+  EOF
+end
+
 for python in python_versions
-
-  envName = "python" + python.gsub(".", "")
-
-  bash "remove_base_env-#{envName}" do
-    user 'root'
-    group 'root'
-    umask "022"
-    cwd "/home/#{node['conda']['user']}"
-    code <<-EOF
-      #{node['conda']['base_dir']}/bin/conda env remove -y -q -n #{envName}
-    EOF
-    only_if "test -d #{node['conda']['base_dir']}/envs/#{envName}", :user => node['conda']['user']
-  end
-
-  Chef::Log.info "Environment creation for: python#{python}"
-  rt1 = python.gsub(".", "")
-  if rt1 = "36"
-    rt1 = "35"
-  end
-  # assume that is python 2.7
-  rt2 = "27mu"
-  if python == "3.6"
-    rt2 = "35m"
-  end
-  customTf=0
-  if node['tensorflow']['custom_url'].start_with?("http://", "https://", "file://")
-    begin
-      uri = URI.parse(node['tensorflow']['custom_url'])
-      %w( http https ).include?(uri.scheme)
-      customTf=1
-    rescue URI::BadURIError
-      Chef::Log.warn "BadURIError custom_url for tensorflow: #{node['tensorflow']['custom_url']}"
-      customTf=0
-    rescue URI::InvalidURIError
-      Chef::Log.warn "InvalidURIError custom_url for tensorflow: #{node['tensorflow']['custom_url']}"
-      customTf=0
-    end
-  end
-
-
-  bash "create_base_env-#{envName}" do
-    user node['conda']['user']
-    group node['conda']['group']
-    umask "022"
-    environment ({ 
-      'HOME' => ::Dir.home(node['conda']['user']), 
-      'USER' => node['conda']['user'],
-      'CONDA_DIR' => node['conda']['base_dir'],
-      'PY' => python.gsub('.', ''),
-      'ENV' => envName,
-      'MPI' => node['tensorflow']['need_mpi'],
-      'HADOOP_HOME' => node['hops']['base_dir'],
-      'JAVA_HOME' => node['java']['java_home'],
-      'CUSTOM_TF' => customTf
-     })
-    code <<-EOF
-    EOF
-  end
 
   if node['conda']['additional_libs'].empty? == false
     add_libs = node['conda']['additional_libs'].split(',').map(&:strip)
@@ -250,39 +239,37 @@ for python in python_versions
   end
 
 
-  if node['tensorflow']['need_tensorrt'] == 1 && node['cuda']['accept_nvidia_download_terms'] == "true"
+  if node['tensorflow']['need_tensorrt'] == 1 && node['cuda']['accept_nvidia_download_terms'] == "true" && node['platform_family'].eql?("debian")
+    rt1 = python.gsub(".", "")
+    if rt1 = "36"
+      rt1 = "35"
+    end
+    # assume that is python 2.7
+    rt2 = "27mu"
+    if python == "3.6"
+      rt2 = "35m"
+    end
 
-    case node['platform_family']
-    when "debian"
+    bash "tensorrt_py#{python}_env" do
+      user "root"
+      umask "022"
+      code <<-EOF
+      set -e
+      if [ -f /usr/local/cuda/version.txt ]  ; then
+        nvidia-smi -L | grep -i gpu
+        if [ $? -eq 0 ] ; then
+        export CONDA_DIR=#{node['conda']['base_dir']}
+        export ENV=#{envName}
+        su #{node['conda']['user']} -c "cd #{tensorrt_dir}/python ; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:#{tensorrt_dir}/lib ; yes | ${CONDA_DIR}/envs/${ENV}/bin/pip install tensorrt-#{node['cuda']['tensorrt']}"-cp#{rt1}-cp#{rt2}-linux_x86_64.whl"
 
-      bash "tensorrt_py#{python}_env" do
-        user "root"
-        umask "022"
-        code <<-EOF
-        set -e
-        if [ -f /usr/local/cuda/version.txt ]  ; then
-          nvidia-smi -L | grep -i gpu
-          if [ $? -eq 0 ] ; then
+        su #{node['conda']['user']} -c "cd #{tensorrt_dir}/uff ; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:#{tensorrt_dir}/lib ; yes | ${CONDA_DIR}/envs/${ENV}/bin/pip install uff-0.2.0-py2.py3-none-any.whl"
 
-
-          export CONDA_DIR=#{node['conda']['base_dir']}
-          export ENV=#{envName}
-          su #{node['conda']['user']} -c "cd #{tensorrt_dir}/python ; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:#{tensorrt_dir}/lib ; yes | ${CONDA_DIR}/envs/${ENV}/bin/pip install tensorrt-#{node['cuda']['tensorrt']}"-cp#{rt1}-cp#{rt2}-linux_x86_64.whl"
-
-          su #{node['conda']['user']} -c "cd #{tensorrt_dir}/uff ; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:#{tensorrt_dir}/lib ; yes | ${CONDA_DIR}/envs/${ENV}/bin/pip install uff-0.2.0-py2.py3-none-any.whl"
-
-#         su #{node['conda']['user']} -c "cd #{tensorrt_dir}/graphsurgeon ; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:#{tensorrt_dir}/lib ; yes | ${CONDA_DIR}/envs/${ENV}/bin/pip install graphsurgeon-0.2.0-py2.py3-none-any.whl"
-
-          fi
         fi
+      fi
 
-        EOF
-      end
-
+      EOF
     end
   end
-
-
 end
 
 #
