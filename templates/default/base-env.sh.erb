@@ -10,7 +10,8 @@ if [ $# -ne 2 ] ; then
 fi  
 
 ENV=$1
-PY=$2
+PYTHON=$2
+PY=`echo ${PYTHON} | sed -e "s/\.//"`
 
 if [ -d ${CONDA_DIR}/envs/${ENV} ] ; then
   ${CONDA_DIR}/bin/conda env remove -y -q -n ${ENV}
@@ -18,7 +19,7 @@ fi
 
 ${CONDA_DIR}/bin/conda info --envs | grep "^${ENV}"
 if [ $? -ne 0 ] ; then
-  ${CONDA_DIR}/bin/conda create -n $ENV python=${PY} -y -q
+  ${CONDA_DIR}/bin/conda create -n $ENV python=${PYTHON} -y -q
   if [ $? -ne 0 ] ; then
      exit 2
   fi

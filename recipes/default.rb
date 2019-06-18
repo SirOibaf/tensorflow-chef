@@ -180,7 +180,7 @@ if node['tensorflow']['custom_url'].start_with?("http://", "https://", "file://"
 end
 
 template "#{node['conda']['base_dir']}/base-env.sh" do
-  source 'base_env.sh.erb'
+  source 'base-env.sh.erb'
   owner node['conda']['user']
   group node['conda']['group']
   mode '0755'
@@ -207,7 +207,7 @@ bash "create_base_envs" do
     'CUSTOM_TF' => customTf
    })
   code <<-EOF
-    parallel --link #{node['conda']['base_dir']}/base-env.sh ::: #{env_names.join(" ")} ::: #{py_verisons.join(" ")}
+    echo "#{env_names.zip(py_versions).join(" ")}" | xargs -n #{env_names.length} -P #{env_names.length} #{node['conda']['base_dir']}/base-env.sh 
   EOF
 end
 
