@@ -4,25 +4,7 @@ include_attribute "kagent"
 default['tensorflow']['user']          = node['tensorflow'].attribute?('user') ? node['install']['user'] : node['kagent']['user']
 default['tensorflow']['group']         = node['install']['user'].empty? ? node['kagent']['group'] : node['install']['user']
 
-# tensorflow and tensorflow-gpu version
-default["tensorflow"]["version"]                 = "1.14.0"
-
-# tensorflow-rocm version
-default['tensorflow']['rocm']['version']         = "1.14.0"
-
 default["tensorflow"]['serving']["version"]      = "1.14.0"
-default["cudatoolkit"]["version"]                = "10.0"
-default["pytorch"]["version"]                    = "1.3.1"
-default["pytorch"]["python2"]["build"]           = "py2.7_cuda10.0.130_cudnn7.6.3_0"
-#pytorch-1.3.1-py3.6_cpu_0
-default["pytorch"]["python3"]["build"]           = "py3.6_cuda10.0.130_cudnn7.6.3_0"
-default["torchvision"]["version"]                = "0.4.2"
-default["matplotlib"]['python2']["version"]      = "2.2.3"
-default["numpy"]["version"]                      = "1.16.5"
-
-#Beam/TFX
-default['pyspark']['version']                    = "2.4.3"
-default['tfx']['version']                        = "0.14.0"
 
 default['tensorflow']['install']       = "dist" # or 'src' or 'custom'
 
@@ -123,22 +105,8 @@ default['bazel']['url']                = "#{node['download_url']}/bazel-#{node['
 default['openmpi']['version']          = "openmpi-3.1.0.tar.gz"
 
 
-default['jupyter']['sparkmagic']['version']            = "0.12.7"
-default['jupyter']['sparkmagic']['url']                = node['download_url'] + "/sparkmagic-" + node['jupyter']['sparkmagic']['version'] + ".tar.gz"
-
-# Pinned Python libary versions to install in the base environments
-default['python2']['ipykernel_version']                = "4.10.0"
-default['python2']['jupyter_console_version']          = "5.2.0"
-default['python2']['ipython_version']                  = "5.8.0"
-
-
 # Feature Store example notebooks and datasets
 #
 default['featurestore']['examples_version']           = node['install']['version']
 default['featurestore']['hops_featurestore_demo_dir'] = "featurestore_demo"
 default['featurestore']['hops_featurestore_demo_url'] = "#{node['download_url']}/featurestore/#{node['featurestore']['examples_version']}/featurestore.tar.gz"
-
-
-# Maggy - dist optimization for TensorFlow/Spark
-#
-default['maggy']['version']                           = "0.3.0"

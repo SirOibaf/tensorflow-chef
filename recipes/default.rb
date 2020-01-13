@@ -8,7 +8,6 @@ if node['tensorflow']['tensorrt'].eql? "true"
   node.override['tensorflow']['need_tensorrt'] = 1
 end
 
-
 # Only the first tensorflow server needs to create the directories in HDFS
 if private_ip.eql? node['tensorflow']['default']['private_ips'][0]
 
@@ -26,9 +25,9 @@ if private_ip.eql? node['tensorflow']['default']['private_ips'][0]
   # Extract Jupyter notebooks
   bash 'extract_notebooks' do
     user "root"
+    cwd Chef::Config['file_cache_path']
     code <<-EOH
                 set -e
-                cd #{Chef::Config['file_cache_path']}
                 rm -rf #{node['tensorflow']['hopstfdemo_dir']}-#{node['tensorflow']['examples_version']}/#{node['tensorflow']['hopstfdemo_dir']}
                 mkdir -p #{node['tensorflow']['hopstfdemo_dir']}-#{node['tensorflow']['examples_version']}/#{node['tensorflow']['hopstfdemo_dir']}
                 tar -zxf #{base_filename} -C #{Chef::Config['file_cache_path']}/#{node['tensorflow']['hopstfdemo_dir']}-#{node['tensorflow']['examples_version']}/#{node['tensorflow']['hopstfdemo_dir']}
@@ -66,9 +65,9 @@ if private_ip.eql? node['tensorflow']['default']['private_ips'][0]
   # Extract Feature Store Jupyter notebooks
    bash 'extract_notebooks' do
      user "root"
+     cwd Chef::Config['file_cache_path']
      code <<-EOH
                 set -e
-                cd #{Chef::Config['file_cache_path']}
                 rm -rf #{node['featurestore']['hops_featurestore_demo_dir']}-#{node['featurestore']['examples_version']}/#{node['featurestore']['hops_featurestore_demo_dir']}
                 mkdir -p #{node['featurestore']['hops_featurestore_demo_dir']}-#{node['featurestore']['examples_version']}/#{node['featurestore']['hops_featurestore_demo_dir']}
                 tar -zxf #{base_filename} -C #{Chef::Config['file_cache_path']}/#{node['featurestore']['hops_featurestore_demo_dir']}-#{node['featurestore']['examples_version']}/#{node['featurestore']['hops_featurestore_demo_dir']}
@@ -123,60 +122,6 @@ if node['tensorflow']['need_tensorrt'] == 1 && node['cuda']['accept_nvidia_downl
       value "$LD_LIBRARY_PATH:#{tensorrt_dir}/lib"
     end
   end
-end
-
-# Install nvm to manage different Node.js versions
-bash "install nvm" do
-  user "root"
-  group "root"
-  environment ({ 'NVM_DIR' => '/usr/local/nvm'})
-  code <<-EOF
-       mkdir -p /usr/local/nvm
-       curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.8/install.sh | bash
-       chgrp -R #{node['hops']['group']} /usr/local/nvm
-       chmod -R g+w /usr/local/nvm
-  EOF
-  not_if { ::File.exists?("/usr/local/nvm/nvm.sh") }
-end
-
-bash "install Node.js v10.16.0" do
-  user node['conda']['user']
-  group node['hops']['group']
-  cwd "/home/#{node['conda']['user']}"
-  environment ({ 'NVM_DIR' => '/usr/local/nvm'})
-  code <<-EOF
-       source /usr/local/nvm/nvm.sh
-       nvm install 10.16.0
-  EOF
-end
-
-# Download Hopsworks jupyterlab_git plugin
-if node['install']['enterprise']['install'].casecmp? "true"
-  cached_file = "jupyterlab_git-#{node['conda']['jupyter']['jupyterlab-git']['version']}-py3-none-any.whl"
-  source = "#{node['install']['enterprise']['download_url']}/jupyterlab_git/#{node['conda']['jupyter']['jupyterlab-git']['version']}/#{cached_file}"
-  remote_file "#{::Dir.home(node['conda']['user'])}/#{cached_file}" do
-    user node['conda']['user']
-    group node['conda']['group']
-    source source
-    headers get_ee_basic_auth_header()
-    sensitive true
-    mode 0555
-    action :create_if_missing
-  end
-end
-
-bash 'extract_sparkmagic' do
-  user "root"
-  group "root"
-  cwd Chef::Config['file_cache_path']
-  umask "022"
-  code <<-EOF
-    set -e
-    rm -rf sparkmagic 
-    rm -rf #{node['conda']['dir']}/sparkmagic
-    tar zxf sparkmagic-#{node['jupyter']['sparkmagic']['version']}.tar.gz
-    mv sparkmagic #{node['conda']['dir']}
-  EOF
 end
 
 # make sure Kerberos dev are installed
